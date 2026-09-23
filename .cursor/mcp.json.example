@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "dadata-local": {
+      "command": "dotnet",
+      "args": [
+        "exec",
+        "src/DadataMcp.Server/bin/Debug/net8.0/DadataMcp.Server.dll"
+      ]
+    }
+  }
+}

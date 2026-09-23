@@ -1,0 +1,27 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{FD3B6293-16D8-4753-A8A9-70A91BF6E98C}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DadataMcp.Server", "src\DadataMcp.Server\DadataMcp.Server.csproj", "{88306DEF-40F1-4D46-BF19-45FC72080751}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{88306DEF-40F1-4D46-BF19-45FC72080751}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{88306DEF-40F1-4D46-BF19-45FC72080751}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{88306DEF-40F1-4D46-BF19-45FC72080751}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{88306DEF-40F1-4D46-BF19-45FC72080751}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{88306DEF-40F1-4D46-BF19-45FC72080751} = {FD3B6293-16D8-4753-A8A9-70A91BF6E98C}
+	EndGlobalSection
+EndGlobal
