@@ -1,6 +1,19 @@
 # DaData Local MCP
 
-Локальный MCP-сервер на C# / .NET 8. Отдаёт агенту в Cursor три инструмента по API [DaData](https://dadata.ru/): страна по названию или коду, адрес по координатам, город по IP. Это собственное решение в репозитории, не облачный MCP с сайта DaData.
+Локальный MCP-сервер на C# / .NET 8. Отдаёт агенту в Cursor три инструмента по API [DaData](https://dadata.ru/): страна по названию или коду, адрес по координатам, город по IP. **Это собственное решение в репозитории**, не облачный MCP с сайта DaData.
+
+```mermaid
+%%{init: {'theme':'base','themeVariables':{'fontSize':'12px','primaryColor':'#eef4ff','primaryTextColor':'#1a2744','primaryBorderColor':'#7aa2e3','lineColor':'#8aa0c8'},'flowchart':{'nodeSpacing':16,'rankSpacing':28,'padding':6}}}%%
+flowchart LR
+    A[Агент] --> M[DaData MCP]
+    M --> C[get_country]
+    M --> G[get_address]
+    M --> I[find_address_by_ip]
+```
+
+
+
+
 
 ## Как IDE подключается к MCP и что такое tool
 
@@ -27,10 +40,10 @@ dotnet build
 ## Как включить в Cursor
 
 1. Соберите проект: `dotnet build`.
-2. Скопируйте [`.env.example`](.env.example) в `.env` в корне проекта и заполните `DADATA_API_KEY` и `DADATA_SECRET_KEY`. Файл `.env` в git не попадает.
-3. Пример конфига MCP без ключей: [`.cursor/mcp.json.example`](.cursor/mcp.json.example). Рабочий файл: [`.cursor/mcp.json`](.cursor/mcp.json).
+2. Скопируйте `[.env.example](.env.example)` в `.env` в корне проекта и заполните `DADATA_API_KEY` и `DADATA_SECRET_KEY`. Файл `.env` в git не попадает.
+3. Пример конфига MCP без ключей: `[.cursor/mcp.json.example](.cursor/mcp.json.example)`. Рабочий файл: `[.cursor/mcp.json](.cursor/mcp.json)`.
 4. Cursor → **Settings → MCP**. Включите сервер `dadata-local`. При старте процесс читает `.env` из корня проекта.
-5. В чате агента проверьте, что видны tools `get_country`, `get_address`, `find_address_by_ip`. Проверочные запросы: [`docs/verification/queries.md`](docs/verification/queries.md).
+5. В чате агента проверьте, что видны tools `get_country`, `get_address`, `find_address_by_ip`. Проверочные запросы: `[docs/verification/queries.md](docs/verification/queries.md)`.
 
 Если ключей нет, процесс завершится с ошибкой в stderr: нужно заполнить `.env`.
 
@@ -40,9 +53,11 @@ dotnet build
 - Tools не читают файлы диска и не запускают команды ОС. Область доступа — только HTTP к `suggestions.dadata.ru`.
 - Логи пишут имя tool, входные параметры и `success`/`error`, без ключей.
 
+
+
 ## Tool outputs contract
 
-Контракт результата задан типами в [`src/DadataMcp.Server/Models/ToolResults.cs`](src/DadataMcp.Server/Models/ToolResults.cs) (L1–L43). MCP сериализует объекты в JSON (camelCase), это не «просто текст».
+Контракт результата задан типами в `[src/DadataMcp.Server/Models/ToolResults.cs](src/DadataMcp.Server/Models/ToolResults.cs)` (L1–L43). MCP сериализует объекты в JSON (camelCase), это не «просто текст».
 
 ### `get_country`
 
@@ -90,6 +105,8 @@ dotnet build
 }
 ```
 
+
+
 ### `find_address_by_ip`
 
 Вход: `ip` (IPv4 или IPv6).
@@ -110,21 +127,25 @@ dotnet build
 
 ## Подтверждения ссылками на код
 
+
+
 ### MCP-сервер
 
-Подъём хоста, метаданные и регистрация tools: [`src/DadataMcp.Server/Program.cs`](src/DadataMcp.Server/Program.cs) **L31–L47**.
+Подъём хоста, метаданные и регистрация tools: `[src/DadataMcp.Server/Program.cs](src/DadataMcp.Server/Program.cs)` **L31–L47**.
 
-Клиент DaData: [`src/DadataMcp.Server/Client/DaDataClient.cs`](src/DadataMcp.Server/Client/DaDataClient.cs) **L20–L81**.
+Клиент DaData: `[src/DadataMcp.Server/Client/DaDataClient.cs](src/DadataMcp.Server/Client/DaDataClient.cs)` **L20–L81**.
 
 ### Инструменты
 
-| Tool | Реализация | Логи вызова |
-| --- | --- | --- |
-| `get_country` | [`DaDataTools.cs`](src/DadataMcp.Server/Tools/DaDataTools.cs) **L21–L76** | L38, L44, L50, L59, L68, L73 |
-| `get_address` | [`DaDataTools.cs`](src/DadataMcp.Server/Tools/DaDataTools.cs) **L78–L126** | L98, L104, L113, L118, L123 |
-| `find_address_by_ip` | [`DaDataTools.cs`](src/DadataMcp.Server/Tools/DaDataTools.cs) **L128–L173** | L142, L149, L157, L165, L170 |
 
-Общий вывод в stderr: [`src/DadataMcp.Server/Logging/ToolCallLog.cs`](src/DadataMcp.Server/Logging/ToolCallLog.cs) **L12–L20**.
+| Tool                 | Реализация                                                                  | Логи вызова                  |
+| -------------------- | --------------------------------------------------------------------------- | ---------------------------- |
+| `get_country`        | `[DaDataTools.cs](src/DadataMcp.Server/Tools/DaDataTools.cs)` **L21–L76**   | L38, L44, L50, L59, L68, L73 |
+| `get_address`        | `[DaDataTools.cs](src/DadataMcp.Server/Tools/DaDataTools.cs)` **L78–L126**  | L98, L104, L113, L118, L123  |
+| `find_address_by_ip` | `[DaDataTools.cs](src/DadataMcp.Server/Tools/DaDataTools.cs)` **L128–L173** | L142, L149, L157, L165, L170 |
+
+
+Общий вывод в stderr: `[src/DadataMcp.Server/Logging/ToolCallLog.cs](src/DadataMcp.Server/Logging/ToolCallLog.cs)` **L12–L20**.
 
 Пример вывода:
 
@@ -135,12 +156,16 @@ dotnet build
 [get_country] params={"query":"...","count":10} status=error http=401
 ```
 
+
+
 ### Агент вызывает нужный tool
 
 Пример запроса: «Какая страна по запросу та?»
 
 - ожидаемый tool: `get_country`
-- фактическое подтверждение: лог stderr в формате выше; скриншот/trace после живого прогона — [`docs/verification/`](docs/verification/)
+- фактическое подтверждение: лог stderr в формате выше; скриншот/trace после живого прогона — `[docs/verification/](docs/verification/)`
+
+
 
 ## Структура
 
@@ -152,3 +177,4 @@ src/DadataMcp.Server/     MCP-хост, клиент DaData, tools
 .cursor/mcp.json.example  тот же пример для отчёта
 docs/verification/        шаблон проверочных запросов
 ```
+
