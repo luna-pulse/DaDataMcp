@@ -35,7 +35,9 @@ public static class Program
                 {
                     Name = "dadata-mcp",
                     Version = "1.0.0",
-                    Title = "DaData MCP"
+                    Title = "DaData MCP",
+                    Description =
+                        "Локальный MCP-сервер подсказок DaData: страна по названию или ISO-коду, адрес по координатам и город по IP."
                 };
                 options.ServerInstructions =
                     "Локальный MCP-сервер DaData. " +

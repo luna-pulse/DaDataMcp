@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "dadata-local": {
+    "DaData MCP. Гео подсказки: страна по названию или ISO-коду, адрес по координатам и город по IP.": {
       "command": "dotnet",
       "args": [
         "exec",
