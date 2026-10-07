@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Net;
 using DadataMcp.Server.Client;
+using DadataMcp.Server.Configuration;
 using DadataMcp.Server.Logging;
 using DadataMcp.Server.Models;
 using DadataMcp.Server.Models.Api;
@@ -12,10 +13,12 @@ namespace DadataMcp.Server.Tools;
 public sealed class DaDataTools
 {
     private readonly IDaDataClient _client;
+    private readonly ApiKeyGate _apiKeyGate;
 
-    public DaDataTools(IDaDataClient client)
+    public DaDataTools(IDaDataClient client, ApiKeyGate apiKeyGate)
     {
         _client = client;
+        _apiKeyGate = apiKeyGate;
     }
 
     [McpServerTool(Name = "get_country", Title = "Страна по названию или коду", ReadOnly = true, Destructive = false, Idempotent = true)]
@@ -24,6 +27,7 @@ public sealed class DaDataTools
         "Вызывай, когда пользователь спрашивает страну, ISO-код или код ОКСМ. " +
         "Не запрашивай API-ключ в чате.")]
     public async Task<GetCountryResult> GetCountry(
+        McpServer server,
         [Description("Запрос одной строкой: «та», «Россия», «TH», «643». Поиск по названию и кодам.")]
         string query,
         [Description("Количество результатов, от 1 до 20. По умолчанию 10.")]
@@ -33,6 +37,8 @@ public sealed class DaDataTools
         var parameters = new { query, count };
         try
         {
+            await EnsureApiKeyAsync(server, cancellationToken);
+
             if (string.IsNullOrWhiteSpace(query))
             {
                 ToolCallLog.Write("get_country", parameters, "error");
@@ -80,6 +86,7 @@ public sealed class DaDataTools
         "Находит ближайшие адреса в России по географическим координатам (обратное геокодирование). " +
         "Вызывай, когда известны широта и долгота. Не запрашивай API-ключ в чате.")]
     public async Task<GetAddressResult> GetAddress(
+        McpServer server,
         [Description("Географическая широта, например 55.878")]
         double lat,
         [Description("Географическая долгота, например 37.653")]
@@ -93,6 +100,8 @@ public sealed class DaDataTools
         var parameters = new { lat, lon, count, radiusMeters };
         try
         {
+            await EnsureApiKeyAsync(server, cancellationToken);
+
             if (count is < 1 or > 20)
             {
                 ToolCallLog.Write("get_address", parameters, "error");
@@ -130,6 +139,7 @@ public sealed class DaDataTools
         "Определяет город и адрес по IPv4 или IPv6. Вызывай, когда пользователь даёт IP-адрес " +
         "или просит узнать город посетителя. Не запрашивай API-ключ в чате.")]
     public async Task<FindAddressByIpResult> FindAddressByIp(
+        McpServer server,
         [Description("IPv4 или IPv6, например 46.226.227.20")]
         string ip,
         CancellationToken cancellationToken)
@@ -137,6 +147,8 @@ public sealed class DaDataTools
         var parameters = new { ip };
         try
         {
+            await EnsureApiKeyAsync(server, cancellationToken);
+
             if (string.IsNullOrWhiteSpace(ip) || !IPAddress.TryParse(ip.Trim(), out _))
             {
                 ToolCallLog.Write("find_address_by_ip", parameters, "error");
@@ -170,6 +182,21 @@ public sealed class DaDataTools
             ToolCallLog.Write("find_address_by_ip", parameters, "error");
             throw;
         }
+    }
+
+    /// <summary>
+    /// Если сессии нет или ей больше суток — открывает форму ключа в чате.
+    /// Форму закрыли — вызов завершается короткой ошибкой без запроса в DaData.
+    /// </summary>
+    private async Task EnsureApiKeyAsync(McpServer server, CancellationToken cancellationToken)
+    {
+        if (await _apiKeyGate.EnsureApiKeyAsync(server, cancellationToken))
+        {
+            return;
+        }
+
+        // Ловится как DaDataClientException в вызывающем tool и логируется с http=401.
+        throw new DaDataClientException(401, "API-ключ DaData не введён. Повторите запрос и заполните форму ключа в чате.");
     }
 
     private static CountrySuggestionResult MapCountry(CountrySuggestionApiItem item)

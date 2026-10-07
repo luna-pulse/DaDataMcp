@@ -25,7 +25,12 @@ public static class Program
         });
         builder.Logging.SetMinimumLevel(LogLevel.Information);
 
-        builder.Services.AddSingleton(DaDataOptions.FromProcess());
+        // Ключ DaData живёт только в памяти процесса: ни .env, ни переменных окружения.
+        // Процесс стартует без ключа: форма открывается при первом вызове tool, а не при включении MCP.
+        // Сроки сессии можно переопределить (DADATA_SESSION_TTL_MINUTES и др.), сам ключ там не хранится.
+        builder.Services.AddSingleton(ApiKeySessionOptions.FromConfiguration(builder.Configuration));
+        builder.Services.AddSingleton<ApiKeySession>();
+        builder.Services.AddSingleton<ApiKeyGate>();
         builder.Services.AddSingleton<IDaDataClient, DaDataClient>();
 
         builder.Services
@@ -52,12 +57,21 @@ public static class Program
                     "Локальный MCP-сервер DaData. " +
                     "Используй get_country для страны по названию или ISO-коду, " +
                     "get_address для адреса по координатам, find_address_by_ip для города по IP. " +
-                    "Ключи API читаются из файла .env и не запрашиваются в чате.";
+                    "API-ключ DaData пользователь вводит в форме, которую сервер сам открывает в чате: " +
+                    "не спрашивай ключ текстом, не передавай его в аргументы tools и не копируй в ответ.";
             })
             .WithStdioServerTransport()
             .WithTools<DaDataTools>();
 
-        await builder.Build().RunAsync();
+        using var host = builder.Build();
+
+        // Страховка для graceful shutdown. Основной механизм: процесс завершается по EOF stdin,
+        // и ключ исчезает вместе с ним.
+        var session = host.Services.GetRequiredService<ApiKeySession>();
+        host.Services.GetRequiredService<IHostApplicationLifetime>()
+            .ApplicationStopping.Register(session.Clear);
+
+        await host.RunAsync();
     }
 
     private static string LogoDataUri()
