@@ -37,7 +37,16 @@ public static class Program
                     Version = "1.0.0",
                     Title = "DaData MCP",
                     Description =
-                        "Локальный MCP-сервер подсказок DaData: страна по названию или ISO-коду, адрес по координатам и город по IP."
+                        "Локальный MCP-сервер подсказок DaData: страна по названию или ISO-коду, адрес по координатам и город по IP.",
+                    Icons =
+                    [
+                        new Icon
+                        {
+                            Source = LogoDataUri(),
+                            MimeType = "image/png",
+                            Sizes = ["18x18"]
+                        }
+                    ]
                 };
                 options.ServerInstructions =
                     "Локальный MCP-сервер DaData. " +
@@ -49,5 +58,16 @@ public static class Program
             .WithTools<DaDataTools>();
 
         await builder.Build().RunAsync();
+    }
+
+    private static string LogoDataUri()
+    {
+        var assembly = typeof(Program).Assembly;
+        using var stream = assembly.GetManifestResourceStream("DadataMcp.Server.logo.png")
+            ?? throw new InvalidOperationException("В сборке нет ресурса logo.png.");
+
+        using var buffer = new MemoryStream();
+        stream.CopyTo(buffer);
+        return "data:image/png;base64," + Convert.ToBase64String(buffer.ToArray());
     }
 }
