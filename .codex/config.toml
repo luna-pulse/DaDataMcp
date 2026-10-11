@@ -1,0 +1,7 @@
+[mcp_servers.dadata]
+command = "dotnet"
+args = ["exec", "src/DadataMcp.Server/bin/Debug/net8.0/DadataMcp.Server.dll"]
+cwd = "src/DadataMcp.Server/bin/Debug/net8.0"
+startup_timeout_sec = 15
+tool_timeout_sec = 180
+required = true

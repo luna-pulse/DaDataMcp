@@ -1,6 +1,7 @@
 # DaData Local MCP
 
-Локальный MCP-сервер на C# / .NET 8. Отдаёт агенту в Cursor три инструмента по API [DaData](https://dadata.ru/): страна по названию или коду, адрес по координатам, город по IP. **Это собственное решение в репозитории**, не облачный MCP с сайта DaData.
+Локальный MCP-сервер на C#, .NET 8, работает по stdio.
+MCP отдает агенту в Cursor три инструмента по API [DaData](https://dadata.ru/): страна по названию или коду, адрес по координатам, город по IP. **Это собственное решение в репозитории**, не облачный MCP с сайта DaData.
 
 ```mermaid
 %%{init: {'theme':'base','themeVariables':{'fontSize':'12px','primaryColor':'#eef4ff','primaryTextColor':'#1a2744','primaryBorderColor':'#7aa2e3','lineColor':'#8aa0c8'},'flowchart':{'nodeSpacing':16,'rankSpacing':28,'padding':6}}}%%
@@ -15,6 +16,42 @@ flowchart LR
 
 
 
+# Проверочные запросы и тестирование
+
+Ключ в чат текстом не пишите — он вводится только в форме, которую сервер сам открывает при вызове tool.
+
+## Запросы с вызовом tool
+
+
+| #   | Запрос пользователя                     | Ожидаемый tool       |
+| --- | --------------------------------------- | -------------------- |
+| 1   | Какая страна имеет код «DE»?            | `get_country`        |
+| 2   | Какой адрес у координат 55.878, 37.653? | `get_address`        |
+| 3   | Какой город у IP 46.226.227.20?         | `find_address_by_ip` |
+| 4   | Найди страну с кодом TH                 | `get_country`        |
+
+
+Ожидаемые фрагменты лога MCP-сервера (stderr). На успешный вызов — одна строка `ToolCallLog`: аргументы tool и `status=success`. Тело POST в DaData и сырой JSON ответа в лог не пишутся.
+
+```text
+[get_country] params={"query":"DE","count":10} status=success
+[get_address] params={"lat":55.878,"lon":37.653,"count":10,"radiusMeters":100} status=success
+[find_address_by_ip] params={"ip":"46.226.227.20"} status=success
+```
+
+
+
+## Запрос без tool (для критерия «5 запросов»)
+
+
+| #   | Запрос пользователя                                         | Ожидаемый tool                       |
+| --- | ----------------------------------------------------------- | ------------------------------------ |
+| 5   | Объясни, как IDE подключается к MCP-серверу Dadata по stdio | нет (ответ из README / общих знаний) |
+| 6   | Покажи json с списком tools от MCP Dadata local             | запрос к локальному mcp              |
+
+
+Итого: 5 запросов, где 4 с реальным вызовом MCP-tool.
+
 ## Как IDE подключается к MCP и что такое tool
 
 Cursor запускает этот сервер как дочерний процесс и говорит с ним по **stdio**: JSON-RPC идёт через stdin/stdout, логи — только в stderr. При подключении IDE выполняет handshake (`initialize`), забирает метаданные сервера (`dadata-mcp` 1.0.0) и список tools. Дальше агент в чате может вызвать tool по имени: передаёт аргументы по JSON-схеме, сервер ходит в DaData и возвращает структурированный JSON.
@@ -25,11 +62,11 @@ Cursor запускает этот сервер как дочерний проц
 
 Ключ DaData нигде на диске не хранится — ни в `.env`, ни в переменных окружения. Он живёт только в памяти процесса MCP. Источник ключа один — форма в чате Cursor (MCP elicitation, режим `form`).
 
-При включении MCP форма **не** открывается: процесс стартует без ключа и просто ждёт вызовов. Форма открывается **при вызове любого tool** через общий метод `EnsureApiKey`, если в сессии нет живого ключа: это первый вызов в новом процессе, вызов после сброса сессии или после закрытой формы.
+При включении MCP форма **не** открывается: процесс стартует без ключа и просто ждёт вызовов. Форма открывается **при вызове любого tool** через `EnsureApiKeyAsync`, если в сессии нет живого ключа: это первый вызов в новом процессе, вызов после сброса сессии или после закрытой формы.
 
 ```mermaid
 flowchart TD
-    toolCall[Вызов tool] --> gate[EnsureApiKey]
+    toolCall[Вызов tool] --> gate[EnsureApiKeyAsync]
     gate --> alive{Сессия жива и младше суток}
     alive -->|да| ready[Ключ уже есть]
     alive -->|нет| form[Форма в чате]
@@ -39,13 +76,17 @@ flowchart TD
     mem --> call
 ```
 
-- Хранение — singleton в памяти процесса, TTL 24 часа. Вызов tool в последний час продлевает сессию ещё на 24 часа. Ни файла, ни базы, ни `.env`. В stderr ключ не пишется.
+
+
+- Хранение — singleton в памяти процесса, TTL 24 часа. Вызов tool в последний час продлевает сессию ещё на 24 часа. Ни файла, ни базы, ни `.env`. В stderr при работе с ключом пишутся только служебные строки `[api-key] …` (запрос формы, принятие, отказ, таймаут, истечение, продление), без самого ключа.
 - Заголовок `Authorization: Token …` ставится на каждый запрос из текущей сессии — после повторного ввода уходит уже новый токен.
-- Сессия сбрасывается: при новом процессе MCP (включение, перезапуск окна Cursor, повторный запуск), при выключении и отключении сервера (процесс завершается по EOF stdin, дополнительно `ApiKeySession.Clear()` при остановке хоста), через 24 часа без продления, при ответе DaData `401`.
+- Сессия сбрасывается через 24 часа без продления, при HTTP 401 от DaData и при остановке процесса.
 - Продление: если до конца сессии осталось не больше часа, вызов tool сдвигает срок на 24 часа от текущего момента. Срок проверяется лениво, при обращении к ключу.
 - Если форму закрыли при вызове tool, ключ не сохраняется, вызов завершается коротким текстом ошибки без запроса в DaData, следующий вызов снова откроет форму.
 - Параллельные вызовы без ключа ждут одну форму. Ожидание ответа формы (и очереди за чужой формой) ограничено 3 минутами: по таймауту вызов завершается ошибкой, следующий откроет форму заново.
 - Сроки можно переопределить без пересборки (в `env` или аргументах запуска в `mcp.json`, ключ там не хранится): `DADATA_SESSION_TTL_MINUTES` (24 ч по умолчанию), `DADATA_SESSION_RENEW_MINUTES` (порог продления, 60 по умолчанию), `DADATA_FORM_TIMEOUT_SECONDS` (180 по умолчанию). Нужно, например, чтобы проверить истечение сессии за пару минут.
+
+
 
 ## Требования
 
@@ -61,38 +102,7 @@ dotnet restore
 dotnet build
 ```
 
-Сборка обязательна до включения MCP: Cursor запускает уже собранный DLL через `dotnet exec`.
-
-## Docker
-
-Тот же stdio-сервер в контейнере. HTTP-порта нет: Cursor запускает контейнер и говорит с процессом через stdin/stdout. API-ключ по-прежнему только в памяти процесса — в `environment`, volume и аргументы `docker run` его передавать не нужно.
-
-Нужен запущенный Docker Desktop.
-
-```bash
-docker compose build
-```
-
-Подключение в Cursor: скопируйте `[.cursor/mcp.docker.json.example](.cursor/mcp.docker.json.example)` в `[.cursor/mcp.json](.cursor/mcp.json)` (или замените блок сервера). Образ должен быть собран до включения MCP.
-
-```json
-"command": "docker",
-"args": ["run", "-i", "--rm", "--init", "dadata-mcp:latest"]
-```
-
-`-i` держит stdin открытым, иначе JSON-RPC оборвётся. Флаг `-t` не ставьте: TTY портит кадры протокола. Логи по-прежнему идут в stderr.
-
-Ручная проверка handshake: запустите контейнер и, не закрывая stdin, отправьте одну строку. Ответ придёт в тот же терминал, пока ввод открыт. Затем Ctrl+C.
-
-```bash
-docker run -i --rm --init dadata-mcp:latest
-```
-
-```json
-{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smoke","version":"0.0.1"}}}
-```
-
-В ответе `serverInfo.name` равен `dadata-mcp`, версия `1.0.0`. Логи `info:` идут в stderr и протокол не затирают.
+Сборка обязательна до включения MCP: Cursor и Codex запускают уже собранный DLL через `dotnet exec`.
 
 ## Как включить в Cursor
 
@@ -100,14 +110,35 @@ docker run -i --rm --init dadata-mcp:latest
 2. Пример конфига MCP: `[.cursor/mcp.json.example](.cursor/mcp.json.example)`. Рабочий файл: `[.cursor/mcp.json](.cursor/mcp.json)`. Ключей в конфиге нет.
 3. Cursor → **Settings → MCP**. Включите сервер. Форма при включении не открывается.
 4. Вызовите любой tool (например, `get_country`): в чате откроется форма ввода API-ключа DaData. Ключ попадёт в память процесса на 24 часа. Если форму закрыть, она снова откроется при следующем вызове tool.
-5. В чате агента проверьте, что видны tools `get_country`, `get_address`, `find_address_by_ip`. Проверочные запросы: `[docs/verification/queries.md](docs/verification/queries.md)`.
+5. В чате агента проверьте, что видны tools `get_country`, `get_address`, `find_address_by_ip`. Проверочные запросы выше: `[readme.md](readme.md)`.
+
+
+
+## Как включить в Codex
+
+Codex подключает этот сервер отдельно от Cursor, через пользовательский файл `~/.codex/config.toml` (на Windows — `%USERPROFILE%\.codex\config.toml`). Образец блока — `[.codex/config.toml](.codex/config.toml)`: его нужно вписать в пользовательский файл. Запускайте Codex из корня репозитория, чтобы относительный путь к DLL совпал. Ключ DaData в `config.toml` не кладётся.
+
+По умолчанию Codex ждёт старт MCP **10 секунд**. Холодный `dotnet exec` за это время может не успеть завершить handshake и отдать список tools. `startup_timeout_sec = 15` удлиняет ожидание, `required = true` делает сервер обязательным: сессия начинается после инициализации `dadata`, а если за 15 секунд процесс не поднялся — запуск завершается ошибкой.
+
+`tool_timeout_sec = 180` совпадает с ожиданием формы ключа (3 минуты, `DADATA_FORM_TIMEOUT_SECONDS`). Стандартный лимит вызова tool в Codex — 60 секунд; при нём вызов обрывается, пока форма ещё открыта.
+
+```toml
+[mcp_servers.dadata]
+command = "dotnet"
+args = ["exec", "src/DadataMcp.Server/bin/Debug/net8.0/DadataMcp.Server.dll"]
+startup_timeout_sec = 15
+tool_timeout_sec = 180
+required = true
+```
+
+
 
 ## Безопасность
 
-- API-ключ хранится только в памяти процесса (TTL 24 часа). Ни `.env`, ни переменных окружения, ни файлов. В исходниках, в `mcp.json`, в аргументах tools и в логах stderr ключа нет.
+- API-ключ хранится только в памяти процесса (TTL 24 часа). Ни `.env`, ни переменных окружения, ни файлов. В исходниках, в `.cursor/mcp.json`, в `~/.codex/config.toml`, в аргументах tools и в логах stderr ключа нет.
 - Единственный способ задать ключ — форма в чате (MCP elicitation, режим `form`). Агент ключ не видит и в промпт не получает.
 - Tools не читают файлы диска и не запускают команды ОС. Область доступа — только HTTP к `suggestions.dadata.ru`.
-- Логи пишут имя tool, входные параметры и `success`/`error`, без ключей.
+- Логи пишут имя tool, входные параметры, `success` или `error` и при ошибке DaData — HTTP-статус. Ключа в логе нет.
 
 
 
@@ -135,7 +166,7 @@ docker run -i --rm --init dadata-mcp:latest
 }
 ```
 
-Если совпадений нет: `suggestions` — пустой массив, в `message` пояснение.
+Если совпадений нет: `suggestions` — пустой массив, `message` — «Страна по запросу не найдена.».
 
 ### `get_address`
 
@@ -181,65 +212,12 @@ docker run -i --rm --init dadata-mcp:latest
 
 Если город не определён: `{ "location": null, "message": "Город по указанному IP определить не удалось." }`.
 
-## Подтверждения ссылками на код
-
-
-
-### MCP-сервер
-
-Подъём хоста, метаданные и регистрация tools: `[src/DadataMcp.Server/Program.cs](src/DadataMcp.Server/Program.cs)` **L31–L47**.
-
-Клиент DaData: `[src/DadataMcp.Server/Client/DaDataClient.cs](src/DadataMcp.Server/Client/DaDataClient.cs)` **L28–L99**. Перед POST в stderr пишутся тело запроса и сырой JSON ответа.
-
-### Инструменты
-
-
-| Tool                 | Реализация                                                                  | Логи вызова                  |
-| -------------------- | --------------------------------------------------------------------------- | ---------------------------- |
-| `get_country`        | `[DaDataTools.cs](src/DadataMcp.Server/Tools/DaDataTools.cs)` **L21–L76**   | L38, L44, L50, L59, L68, L73 |
-| `get_address`        | `[DaDataTools.cs](src/DadataMcp.Server/Tools/DaDataTools.cs)` **L78–L126**  | L98, L104, L113, L118, L123  |
-| `find_address_by_ip` | `[DaDataTools.cs](src/DadataMcp.Server/Tools/DaDataTools.cs)` **L128–L173** | L142, L149, L157, L165, L170 |
-
-
-Общий вывод в stderr: `[src/DadataMcp.Server/Logging/ToolCallLog.cs](src/DadataMcp.Server/Logging/ToolCallLog.cs)` **L12–L42**.
-
-На каждый вызов, который дошёл до DaData, три строки: имя tool, JSON тела POST (`dadata_request`) и сырой JSON ответа (`dadata_response`). Ключ API в лог не попадает. Строка `status=` — итог самого tool, в том числе если запрос в DaData не отправлялся.
-
-Пример вывода:
-
-```text
-[get_country] dadata_request={"query":"та","count":10}
-[get_country] dadata_response http=200 {"suggestions":[...]}
-[get_country] params={"query":"та","count":10} status=success
-[get_address] dadata_request={"lat":55.878,"lon":37.653,"count":10,"radius_meters":100}
-[get_address] dadata_response http=200 {"suggestions":[...]}
-[get_address] params={"lat":55.878,"lon":37.653,"count":10,"radiusMeters":100} status=success
-[find_address_by_ip] dadata_request={"ip":"46.226.227.20"}
-[find_address_by_ip] dadata_response http=200 {"location":{...}}
-[find_address_by_ip] params={"ip":"46.226.227.20"} status=success
-[get_country] params={"query":"...","count":10} status=error http=401
-```
-
-
-
-### Агент вызывает нужный tool
-
-Пример запроса: «Какая страна по запросу та?»
-
-- ожидаемый tool: `get_country`
-- фактическое подтверждение: лог stderr в формате выше; скриншот/trace после живого прогона — `[docs/verification/](docs/verification/)`
-
-
-
 ## Структура
 
 ```text
 src/DadataMcp.Server/          MCP-хост, клиент DaData, tools, сессия ключа
-Dockerfile                    образ stdio-сервера (без порта и без ключа)
-docker-compose.yml            сборка образа dadata-mcp:latest
-.cursor/mcp.json              конфиг Cursor без секретов
+.cursor/mcp.json              рабочий конфиг Cursor без секретов
 .cursor/mcp.json.example      запуск через dotnet exec
-.cursor/mcp.docker.json.example  запуск собранного образа через docker run -i
-docs/verification/            шаблон проверочных запросов
+.codex/config.toml            образец MCP для ~/.codex/config.toml
 ```
 
